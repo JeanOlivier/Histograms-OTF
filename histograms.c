@@ -209,15 +209,20 @@ void histogram2d8_unsigned(uint8_t *data1, uint8_t *data2, uint64_t size, uint64
         {
             tmp1 = data1_64[i]; 
             tmp2 = data2_64[i]; 
-            hist[ ((tmp1 >>  0 & 0xFF)<<8) + (tmp2 >>  0 & 0xFF) ]++;
-            hist[ ((tmp1 >>  8 & 0xFF)<<8) + (tmp2 >>  8 & 0xFF) ]++;
-            hist[ ((tmp1 >> 16 & 0xFF)<<8) + (tmp2 >> 16 & 0xFF) ]++;
-            hist[ ((tmp1 >> 24 & 0xFF)<<8) + (tmp2 >> 24 & 0xFF) ]++;
-            hist[ ((tmp1 >> 32 & 0xFF)<<8) + (tmp2 >> 32 & 0xFF) ]++;
-            hist[ ((tmp1 >> 40 & 0xFF)<<8) + (tmp2 >> 40 & 0xFF) ]++;
-            hist[ ((tmp1 >> 48 & 0xFF)<<8) + (tmp2 >> 48 & 0xFF) ]++;
-            hist[ ((tmp1 >> 56 & 0xFF)<<8) + (tmp2 >> 56 & 0xFF) ]++;
+            hist[ (tmp1 <<  8 & 0xFF00) + (tmp2 >>  0 & 0xFF) ]++;
+            hist[ (tmp1 >>  0 & 0xFF00) + (tmp2 >>  8 & 0xFF) ]++;
+            hist[ (tmp1 >>  8 & 0xFF00) + (tmp2 >> 16 & 0xFF) ]++;
+            hist[ (tmp1 >> 16 & 0xFF00) + (tmp2 >> 24 & 0xFF) ]++;
+            hist[ (tmp1 >> 24 & 0xFF00) + (tmp2 >> 32 & 0xFF) ]++;
+            hist[ (tmp1 >> 32 & 0xFF00) + (tmp2 >> 40 & 0xFF) ]++;
+            hist[ (tmp1 >> 40 & 0xFF00) + (tmp2 >> 48 & 0xFF) ]++;
+            hist[ (tmp1 >> 48 & 0xFF00) + (tmp2 >> 56 & 0xFF) ]++;
         }
+    }
+    // The data that doesn't fit in 64bit chunks, openmp would be overkill here.
+    for (int i=size-(size%8); i<size; i++)
+    {
+        hist[ (data1[i]<<8) + data2[i] ]++; // bits > b should be 0
     }
 }
 
@@ -239,7 +244,7 @@ void histogram2d8_signed(uint8_t *data1, uint8_t *data2, uint64_t size, uint64_t
 // The amount of 16bit samples (*size*) should be a multiple of 4, remainders are ignored.
 void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uint64_t *hist, const uint32_t b)
 {
-    // Precomputing the correct mask and shift values. Helps readability, might help performance. 
+    // Precomputing the correct mask and shift values. Helps readability, doesn't  really help performance. 
     const int32_t tail0 = 16-b;
     const int32_t tail1 = tail0+16;
     const int32_t tail2 = tail1+16;
@@ -263,11 +268,13 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
             h[ ((tmp1 >> tail1 & mask) << b) + (tmp2 >> tail1 & mask) ]++;
             h[ ((tmp1 >> tail2 & mask) << b) + (tmp2 >> tail2 & mask) ]++;
             h[ ((tmp1 >> tail3 & mask) << b) + (tmp2 >> tail3 & mask) ]++;
-            //h[ (data1[i]>>tail0)*block + (data2[i]>>tail0) ]++; // bits > b should be 0
-            //h[ (((tmp1 >>  0 & 0xFFFF) >> tail0) << b) + ((tmp2 >>  0 & 0xFFFF) >> tail0) ]++;   
-            //h[ (((tmp1 >> 16 & 0xFFFF) >> tail0) << b) + ((tmp2 >> 16 & 0xFFFF) >> tail0) ]++;
-            //h[ (((tmp1 >> 32 & 0xFFFF) >> tail0) << b) + ((tmp2 >> 32 & 0xFFFF) >> tail0) ]++;
-            //h[ (((tmp1 >> 48 & 0xFFFF) >> tail0) << b) + ((tmp2 >> 48 & 0xFFFF) >> tail0) ]++;
+            // In the b=10 case, the above reduces to the following 4 lines. 
+            // Executing those instead of the b-dependent ones with b=10 doesn't improve performances.
+            // The compiler seems to do clever optimisations.
+            //  h[ (tmp1 <<  4 & 0xFFC00) + (tmp2 >>  6 & 0x3FF) ]++;   
+            //  h[ (tmp1 >> 12 & 0xFFC00) + (tmp2 >> 22 & 0x3FF) ]++;
+            //  h[ (tmp1 >> 28 & 0xFFC00) + (tmp2 >> 38 & 0x3FF) ]++;
+            //  h[ (tmp1 >> 44 & 0xFFC00) + (tmp2 >> 54 & 0x3FF) ]++;
         }
         #pragma omp critical
         for (uint64_t j=0; j<(1<<(b*2));j++)
@@ -275,6 +282,11 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
             hist[j] += h[j];
         }
         free(h);
+    }
+    // The data that doesn't fit in 64bit chunks, openmp would be overkill here.
+    for (int i=size-(size%4); i<size; i++)
+    {
+        hist[ ((data1[i]>>tail0)<<b) + (data2[i]>>tail0) ]++; // bits > b should be 0
     }
 }
 
@@ -285,6 +297,7 @@ void histogram2d16_signed(int16_t *data1, int16_t *data2, uint64_t size, uint64_
     histogram2d16_unsigned(data1_unsigned, data2_unsigned, size, hist, b);
     swap_histogram2d(hist, b);
 }
+
 
 
 // Computes the 2d histogram for (8<b<=16)-bit samples in uint16 containers
@@ -305,6 +318,7 @@ void histogram2d16_old(uint16_t *data1, uint16_t *data2, uint64_t size, uint64_t
         }
     }
 }
+
 
 
 // Computes the 2d histogram for 8-bit samples in uint8 containers

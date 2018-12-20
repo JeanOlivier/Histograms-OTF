@@ -73,6 +73,7 @@ def hist2dNbits(x, y, n=8, force_n=False):
     k = 2**n 
 
     if cont8:
+        assert n==8, "Only 8bit histograms are supported for 8bit containers"
         fct = lib['histogram2d8_signed' if signed else 'histogram2d8_unsigned']
         fct.argtypes = (
             ndpointer(
