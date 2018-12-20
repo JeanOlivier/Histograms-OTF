@@ -137,30 +137,7 @@ void histogram16_signed(int16_t *data, uint64_t size, uint64_t *hist, const int 
 }
 
 
-// Computes the histogram for (8<b<=16)-bit samples in int16 containers
-void histogram16_signed_old(int16_t *data, uint64_t size, uint64_t *hist, const int b)
-{   
-    const int32_t tail = 16-b;
-    uint64_t *data_64 = (uint64_t *) data;
-    #pragma omp parallel
-    {
-        manage_thread_affinity(); // For 64+ logical cores on Windows
-        uint64_t tmp=0;
-        #pragma omp for reduction(+:hist[:1<<b])
-        for (uint64_t i=0; i<size/4; i++)
-        {
-            //hist[( (int32_t)(data[i]) + (1<<15) ) >> tail]++;
-            tmp = data_64[i]; // bits > b should be 0
-            hist[( (int32_t)( (int16_t)(tmp >>  0 & 0xFFFF) ) + (1<<15) ) >> tail]++;
-            hist[( (int32_t)( (int16_t)(tmp >> 16 & 0xFFFF) ) + (1<<15) ) >> tail]++;
-            hist[( (int32_t)( (int16_t)(tmp >> 32 & 0xFFFF) ) + (1<<15) ) >> tail]++;
-            hist[( (int32_t)( (int16_t)(tmp >> 48 & 0xFFFF) ) + (1<<15) ) >> tail]++;
-        }
-    }
-}
-
-
-// #Python POC implementation of the 2d swap: 
+// #Python POC implementation of the 2d swap, simple but not optimal: 
 //  
 // def swap(x):
 //     tmp = copy(x[:len(x)/2])
@@ -175,8 +152,7 @@ void histogram16_signed_old(int16_t *data, uint64_t size, uint64_t *hist, const 
 //     for i in range(l):
 //         swap(xx[i*l:(i+1)*l])
 //     return xx.reshape(x.shape)
-
-
+//
 // A 2d histogram done on int casted as uint will be swapped on its two axis
 // This swaps it back, b is the bitlength of the histogram
 void swap_histogram2d(uint64_t *hist, const int b)
@@ -188,6 +164,7 @@ void swap_histogram2d(uint64_t *hist, const int b)
         swap_histogram(hist+(i*rsize), b); // Horizontal swap of each row
     }
 }
+
 
 // Computes the 2d histogram for 8-bit samples in uint8 containers
 //
@@ -225,6 +202,7 @@ void histogram2d8_unsigned(uint8_t *data1, uint8_t *data2, uint64_t size, uint64
         hist[ (data1[i]<<8) + data2[i] ]++; // bits > b should be 0
     }
 }
+
 
 void histogram2d8_signed(uint8_t *data1, uint8_t *data2, uint64_t size, uint64_t *hist)
 {
@@ -290,6 +268,7 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
     }
 }
 
+
 void histogram2d16_signed(int16_t *data1, int16_t *data2, uint64_t size, uint64_t *hist, const uint32_t b)
 {
     uint16_t *data1_unsigned = (uint16_t *) data1;
@@ -298,71 +277,4 @@ void histogram2d16_signed(int16_t *data1, int16_t *data2, uint64_t size, uint64_
     swap_histogram2d(hist, b);
 }
 
-
-
-// Computes the 2d histogram for (8<b<=16)-bit samples in uint16 containers
-//
-// The 2d histogram is represented by a single dimension array, logically
-// seperated in 2**b blocks corresponding to the data1 stream, with in-block
-// indices corresponding to the data2 stream.
-// It appears as a 2d array in the python wrapper.
-void histogram2d16_old(uint16_t *data1, uint16_t *data2, uint64_t size, uint64_t *hist, const uint32_t b)
-{
-    #pragma omp parallel
-    {
-        manage_thread_affinity(); // For 64+ logical cores on Windows
-        #pragma omp for reduction(+:hist[:1<<(b*2)]) // Cause segfault for b >= 10 if stacksize <= 8M
-        for (uint64_t i=0; i<size; i++)
-        {
-            hist[ (data1[i]<<b) + data2[i] ]++; // bits > b should be 0
-        }
-    }
-}
-
-
-
-// Computes the 2d histogram for 8-bit samples in uint8 containers
-//
-// The 2d histogram is represented by a single dimension array, logically
-// seperated in 256 blocks corresponding to the data1 stream, with in-block
-// indices corresponding to the data2 stream.
-// It appears as a 2d array in the python wrapper.
-void histogram2d8_bak(uint8_t *data1, uint8_t *data2, uint64_t size, uint64_t *hist)
-{
-    #pragma omp parallel
-    {
-        manage_thread_affinity(); // For 64+ logical cores on Windows
-        #pragma omp for reduction(+:hist[:1<<(8*2)])
-        for (uint64_t i=0; i<size; i++)
-        {
-            hist[ (data1[i]<<8) + data2[i] ]++; // bits > b should be 0
-        }
-    }
-}
-
-// Computes the 2d histogram for (8<b<=16)-bit samples in uint16 containers
-//
-// The 2d histogram is represented by a single dimension array, logically
-// seperated in 2**b blocks corresponding to the data1 stream, with in-block
-// indices corresponding to the data2 stream.
-// It appears as a 2d array in the python wrapper.
-void histogram2d16_bak(uint16_t *data1, uint16_t *data2, uint64_t size, uint64_t *hist, const uint32_t b)
-{
-    #pragma omp parallel
-    {
-        manage_thread_affinity(); // For 64+ logical cores on Windows
-        
-        uint64_t *h = (uint64_t *) calloc(1<<(b*2), sizeof(uint64_t)); // Filled with 0s.
-        #pragma omp for //reduction(+:h[:1<<(b*2)])  
-        for (uint64_t i=0; i<size; i++)
-        {
-            h[ (data1[i]<<b) + data2[i] ]++; // bits > b should be 0
-        }
-        #pragma omp critical
-        for (uint64_t j=0; j<(1<<(b*2));j++)
-        {
-            hist[j] += h[j];
-        }
-    }
-}
 
