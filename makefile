@@ -7,11 +7,9 @@ RM = rm
 CFLAGS = -O3 -march=native -Wall
 OMPFLAGS = -fopenmp -fopenmp-simd
 SHRFLAGS = -fPIC -shared
-#HWLOCFLAGS = $(shell $(PKG_CFG) --cflags hwloc)
 
 # libraries
 LDLIBS = -lmpfr
-#HWLOCLIBS = $(shell $(PKG_CFG) --libs hwloc)
 
 # filenames
 SRC = histograms.c
@@ -22,9 +20,6 @@ SHRTGT = $(SRC:.c=$(SHREXT))
 
 
 all: $(SHRTGT) #$(TARGET) $(SHRTGT) 
-
-#$(TARGET): $(SRC)
-#	$(CC) $(SRC) -o $(TARGET) $(CFLAGS) $(OMPFLAGS) $(LDLIBS)
 
 $(SHRTGT): $(SRC)
 	$(CC) $(SRC) -o $(SHRTGT) $(SHRFLAGS) $(CFLAGS) $(OMPFLAGS) $(LDLIBS)
