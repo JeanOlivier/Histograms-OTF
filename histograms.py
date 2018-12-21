@@ -60,8 +60,14 @@ def hist1dNbits(x, n=8):
     return hist
 
 
-def hist2dNbits(x, y, n=8, force_n=False):
+def hist2dNbits(x, y, n=8, force_n=False, atomic='Reduction'):
     """
+    Atomic reduction chosen heuristically as a sweet spot for:
+        - somewhat correlated data
+        - large thread counts
+        - 10+ bit histograms
+    Atomic (reduction) performance is highly dependant on data and bit depth.
+    It requires testing but it can drastically improve performance.
     """
     if not force_n:
         assert 8<=n<=12, "8<=n<=12 is required, set kwarg *force_n* to True to override"
@@ -69,7 +75,18 @@ def hist2dNbits(x, y, n=8, force_n=False):
     assert x.dtype == y.dtype, "x and y should be of the same type"
     signed = True if (x.dtype in [int8, int16]) else False
     cont8 = x.dtype in [int8, uint8]
-
+    
+    try:
+        atomic = atomic.lower()
+    except: pass
+    assert atomic in ['none', None, 'reduction', 'partial', 'full'], "invalid atomic value"
+    if atomic in ['none', None]:
+        a=0
+    elif atomic in ['reduction', 'partial']:
+        a=1
+    elif atomic == 'full':
+        a=2
+        
     k = 2**n 
 
     if cont8:
@@ -100,10 +117,11 @@ def hist2dNbits(x, y, n=8, force_n=False):
             ),
             ctypes.c_uint64,
             ndpointer(dtype=ctypes.c_uint64, shape=(k,k)),
-            ctypes.c_uint64
+            ctypes.c_uint64,
+            ctypes.c_uint
         )
         
     hist = zeros((k,k), dtype=ctypes.c_uint64)
-    fct(x, y, len(x), hist) if cont8 else fct(x, y, len(x), hist, n)
+    fct(x, y, len(x), hist) if cont8 else fct(x, y, len(x), hist, n, a)
     
     return hist
