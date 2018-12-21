@@ -8,6 +8,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include <omp.h>
 #include "mpfr.h"
@@ -214,6 +215,30 @@ void histogram2d8_signed(uint8_t *data1, uint8_t *data2, uint64_t size, uint64_t
 }
 
 
+void reduce(uint64_t** arrs, uint64_t bins, uint64_t begin, uint64_t end)
+{
+    assert(begin < end);
+    if (end - begin == 1) {
+        return;
+    }
+    uint64_t pivot = (begin + end) / 2;
+    /* Moving the termination condition here will avoid very short tasks,
+     * but make the code less nice. */
+    //#pragma omp task
+    reduce(arrs, bins, begin, pivot);
+    //#pragma omp task
+    reduce(arrs, bins, pivot, end);
+    //#pragma omp taskwait
+    /* now begin and pivot contain the partial sums. */
+    #pragma omp parallel 
+    {
+        manage_thread_affinity();
+        #pragma omp for
+        for (uint64_t i = 0; i < bins; i++)
+            arrs[begin][i] += arrs[pivot][i];
+    }
+}
+
 // Computes the 2d histogram for (8<b<=16)-bit samples in uint16 containers
 //
 // The 2d histogram is represented by a single dimension array, logically
@@ -234,11 +259,16 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
     const int32_t tail3 = tail2+16;
     const int32_t mask = (1<<b)-1; // Right amount of 0b1
 
+    uint64_t **hs;
+    int n;
+
     uint64_t *data1_64 = (uint64_t *) data1;
     uint64_t *data2_64 = (uint64_t *) data2;
     #pragma omp parallel
     {
         manage_thread_affinity(); // For 64+ logical cores on Windows
+        n = omp_get_num_threads();
+        
         uint64_t tmp1=0;
         uint64_t tmp2=0;
         // Full atomic should be faster when there's low memory collision, e.g. random data or large *b*.
@@ -261,8 +291,12 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
         }
         // Using local histograms that have to be reduced afterwards 
         else{
+            #pragma omp single
+            hs = (uint64_t **) malloc(n * sizeof(uint64_t));
             uint64_t *h = (uint64_t *) calloc(1<<(b*2), sizeof(uint64_t)); // Filled with 0s.
-            #pragma omp for nowait
+            hs[omp_get_thread_num()] = h;
+            
+            #pragma omp for //nowait
             for (uint64_t i=0; i<size/4; i++){
                 tmp1 = data1_64[i]; 
                 tmp2 = data2_64[i]; 
@@ -271,12 +305,27 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
                 h[ ((tmp1 >> tail2 & mask) << b) + (tmp2 >> tail2 & mask) ]++;
                 h[ ((tmp1 >> tail3 & mask) << b) + (tmp2 >> tail3 & mask) ]++;
             }
-            #pragma omp critical
-            for (uint64_t j=0; j<(1<<(b*2));j++){
-                hist[j] += h[j];
+            // TODO: A way to choose between *reduce* or *critical*
+            //#pragma omp critical
+            //for (uint64_t j=0; j<(1<<(b*2));j++){
+            //    hist[j] += h[j];
+            //}
+            //free(h);
+            #pragma omp single
+            reduce(hs, 1<<(b*2), 0, n);
+            #pragma omp barrier
+            #pragma omp for
+            for (uint64_t i=0; i<1<<(b*2); i++){
+                hist[i]=hs[0][i];
             }
-            free(h);
+
         }
+    }
+    if (atomic == 0){
+        for (int i=0; i<n; i++){
+            free(hs[i]);
+        }
+        free(hs);
     }
     // The data that doesn't fit in 64bit chunks, openmp would be overkill here.
     for (int i=size-(size%4); i<size; i++){
