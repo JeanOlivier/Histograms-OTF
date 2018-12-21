@@ -65,7 +65,7 @@ def hist2dNbits(x, y, n=8, force_n=False, atomic=False):
     No atomic chosen heuristically as a sweet spot for:
         - somewhat correlated data
         - 10 bit histogram
-    Full atomic performance is highly dependant on data and bit depth.
+    Full atomic performance is highly dependent on data and bit depth.
     
     It requires testing but it can drastically improve performance for large
     bitdepth histograms and/or uncorrelated data.
