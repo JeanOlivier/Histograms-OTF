@@ -61,13 +61,11 @@ void swap_histogram(uint64_t *hist, const int b)
     const int halfsize = 1<<(b-1);
     uint64_t *tmp = calloc(halfsize, sizeof(uint64_t));
     int i=0;
-    for (; i<halfsize; i++)  // Paralelizing those small loops is detrimental
-    {
+    for (; i<halfsize; i++){  // Paralelizing those small loops is detrimental
         tmp[i] = hist[i];
         hist[i] = hist[i+halfsize];
     }
-    for (; i<2*halfsize; i++)
-    {
+    for (; i<2*halfsize; i++){
         hist[i] = tmp[i-halfsize];
     }
     free(tmp);
@@ -83,8 +81,7 @@ void histogram8_unsigned(uint8_t *data, uint64_t size, uint64_t *hist)
         manage_thread_affinity(); // For 64+ logical cores on Windows
         uint64_t tmp=0;
         #pragma omp for reduction(+:hist[:1<<8])
-        for (uint64_t i=0; i<size/8; i++)
-        {
+        for (uint64_t i=0; i<size/8; i++){
             tmp = data_64[i];
             hist[tmp >>  0 & 0xFF]++;
             hist[tmp >>  8 & 0xFF]++;
@@ -97,8 +94,7 @@ void histogram8_unsigned(uint8_t *data, uint64_t size, uint64_t *hist)
         }
     }
     // The data that doesn't fit in 64bit chunks, openmp would be overkill here.
-    for (int i=size-(size%8); i<size; i++)
-    {
+    for (int i=size-(size%8); i<size; i++){
         hist[ data[i] ]++; 
     }
 }
@@ -122,8 +118,7 @@ void histogram16_unsigned(uint16_t *data, uint64_t size, uint64_t *hist, const i
         manage_thread_affinity(); // For 64+ logical cores on Windows
         uint64_t tmp=0;
         #pragma omp for reduction(+:hist[:1<<b])
-        for (uint64_t i=0; i<size/4; i++)
-        {
+        for (uint64_t i=0; i<size/4; i++){
             tmp = data_64[i]; // tail get rid of bits > b
             hist[ (tmp >>   0 & 0xFFFF) >> tail ]++;
             hist[ (tmp >>  16 & 0xFFFF) >> tail ]++;
@@ -132,8 +127,7 @@ void histogram16_unsigned(uint16_t *data, uint64_t size, uint64_t *hist, const i
         }
     }
     // The data that doesn't fit in 64bit chunks, openmp would be overkill here.
-    for (int i=size-(size%4); i<size; i++)
-    {
+    for (int i=size-(size%4); i<size; i++){
         hist[ data[i] >> tail ]++; 
     }
 }
@@ -169,8 +163,7 @@ void swap_histogram2d(uint64_t *hist, const int b)
 {
     uint64_t rsize = 1<<b;     // Number AND Size of rows (because it's a square)
     swap_histogram(hist, 2*b); // Vertical swap
-    for (uint64_t i=0; i<rsize; i++) // For each row
-    {
+    for (uint64_t i=0; i<rsize; i++){ // For each row
         swap_histogram(hist+(i*rsize), b); // Horizontal swap of each row
     }
 }
@@ -192,8 +185,7 @@ void histogram2d8_unsigned(uint8_t *data1, uint8_t *data2, uint64_t size, uint64
         uint64_t tmp1=0;
         uint64_t tmp2=0;
         #pragma omp for reduction(+:hist[:1<<(8*2)])
-        for (uint64_t i=0; i<size/8; i++)
-        {
+        for (uint64_t i=0; i<size/8; i++){
             tmp1 = data1_64[i]; 
             tmp2 = data2_64[i]; 
             hist[ (tmp1 <<  8 & 0xFF00) + (tmp2 >>  0 & 0xFF) ]++;
@@ -207,8 +199,7 @@ void histogram2d8_unsigned(uint8_t *data1, uint8_t *data2, uint64_t size, uint64
         }
     }
     // The data that doesn't fit in 64bit chunks, openmp would be overkill here.
-    for (int i=size-(size%8); i<size; i++)
-    {
+    for (int i=size-(size%8); i<size; i++){
         hist[ (data1[i]<<8) + data2[i] ]++;
     }
 }
@@ -253,12 +244,10 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
         uint64_t tmp2=0;
         // Full atomic should be faster when there's low memory collision, e.g. random data or large *b*.
         // Strickingly, for a given set of data it's typically faster for large *b*.
-        if (atomic == 2)
-        {
+        if (atomic == 2){
             // No local histogram; no reduction!
             #pragma omp for //reduction(+:h[:1<<(b*2)])  
-            for (uint64_t i=0; i<size/4; i++)
-            {
+            for (uint64_t i=0; i<size/4; i++){
                 tmp1 = data1_64[i]; 
                 tmp2 = data2_64[i]; 
                 #pragma omp atomic update
@@ -272,12 +261,10 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
             }
         }
         // Using local histograms that have to be reduced afterwards 
-        else if ( (atomic == 0)||(atomic == 1) )
-        {
+        else if ( (atomic == 0)||(atomic == 1) ){
             uint64_t *h = (uint64_t *) calloc(1<<(b*2), sizeof(uint64_t)); // Filled with 0s.
             #pragma omp for 
-            for (uint64_t i=0; i<size/4; i++)
-            {
+            for (uint64_t i=0; i<size/4; i++){
                 tmp1 = data1_64[i]; 
                 tmp2 = data2_64[i]; 
                 h[ ((tmp1 >> tail0 & mask) << b) + (tmp2 >> tail0 & mask) ]++;   
@@ -286,31 +273,25 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
                 h[ ((tmp1 >> tail3 & mask) << b) + (tmp2 >> tail3 & mask) ]++;
             }
             // No atomic, safe but potentially slow
-            if (atomic == 0)
-            {
+            if (atomic == 0){
                 #pragma omp critical
-                for (uint64_t j=0; j<(1<<(b*2));j++)
-                {
+                for (uint64_t j=0; j<(1<<(b*2));j++){
                     hist[j] += h[j];
                 }
-                free(h);
             }
             // Atomic reduction: can speed up reduction for large thread count
-            else if (atomic == 1)
-            {
+            else if (atomic == 1){
                 #pragma omp for
-                for (uint64_t j=0; j<(1<<(b*2));j++)
-                {
+                for (uint64_t j=0; j<(1<<(b*2));j++){
                     #pragma omp atomic update
                     hist[j] += h[j];
                 }
-                free(h);
             }
+            free(h);
         }
     }
     // The data that doesn't fit in 64bit chunks, openmp would be overkill here.
-    for (int i=size-(size%4); i<size; i++)
-    {
+    for (int i=size-(size%4); i<size; i++){
         hist[ ((data1[i]>>tail0)<<b) + (data2[i]>>tail0) ]++;
     }
 }
