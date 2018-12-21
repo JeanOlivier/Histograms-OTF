@@ -26,13 +26,13 @@ def hist1dNbits(x, n=8):
     """
     """
     signed = True if (x.dtype in [int8, int16]) else False
-    cont8 = x.dtype in [int8, uint8]
+    container8 = x.dtype in [int8, uint8]
     assert n in range(8,16+1), "Supported bit depths are from 8 to 16"
 
     k = 2**n 
     #fct = lib['histogram{:d}'.format(n)]
     #if n==8:
-    if cont8:
+    if container8:
         fct = lib['histogram8_signed' if signed else 'histogram8_unsigned']
         fct.argtypes = (
             ndpointer(
@@ -55,41 +55,32 @@ def hist1dNbits(x, n=8):
         )
 
     hist = zeros(k, dtype=ctypes.c_uint64)
-    fct(x, len(x), hist) if cont8 else fct(x, len(x), hist, n)
+    fct(x, len(x), hist) if container8 else fct(x, len(x), hist, n)
     
     return hist
 
 
-def hist2dNbits(x, y, n=8, force_n=False, atomic='Reduction'):
+def hist2dNbits(x, y, n=8, force_n=False, atomic=False):
     """
-    Atomic reduction chosen heuristically as a sweet spot for:
+    No atomic chosen heuristically as a sweet spot for:
         - somewhat correlated data
-        - large thread counts
-        - 10+ bit histograms
-    Atomic (reduction) performance is highly dependant on data and bit depth.
-    It requires testing but it can drastically improve performance.
+        - 10 bit histogram
+    Full atomic performance is highly dependant on data and bit depth.
+    
+    It requires testing but it can drastically improve performance for large
+    bitdepth histograms and/or uncorrelated data.
     """
-    if not force_n:
+    if not force_n: # To avoid filling the ram instantly
         assert 8<=n<=12, "8<=n<=12 is required, set kwarg *force_n* to True to override"
     assert len(x)==len(y), "len(x)==len(y) is required"
     assert x.dtype == y.dtype, "x and y should be of the same type"
     signed = True if (x.dtype in [int8, int16]) else False
-    cont8 = x.dtype in [int8, uint8]
+    container8 = x.dtype in [int8, uint8]
+    a = 1 if atomic else 0
     
-    try:
-        atomic = atomic.lower()
-    except: pass
-    assert atomic in ['none', None, 'reduction', 'partial', 'full'], "invalid atomic value"
-    if atomic in ['none', None]:
-        a=0
-    elif atomic in ['reduction', 'partial']:
-        a=1
-    elif atomic == 'full':
-        a=2
-        
     k = 2**n 
 
-    if cont8:
+    if container8:
         assert n==8, "Only 8bit histograms are supported for 8bit containers"
         fct = lib['histogram2d8_signed' if signed else 'histogram2d8_unsigned']
         fct.argtypes = (
@@ -122,6 +113,6 @@ def hist2dNbits(x, y, n=8, force_n=False, atomic='Reduction'):
         )
         
     hist = zeros((k,k), dtype=ctypes.c_uint64)
-    fct(x, y, len(x), hist) if cont8 else fct(x, y, len(x), hist, n, a)
+    fct(x, y, len(x), hist) if container8 else fct(x, y, len(x), hist, n, a)
     
     return hist
