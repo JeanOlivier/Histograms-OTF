@@ -296,7 +296,7 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
             uint64_t *h = (uint64_t *) calloc(1<<(b*2), sizeof(uint64_t)); // Filled with 0s.
             hs[omp_get_thread_num()] = h;
             
-            #pragma omp for //nowait
+            #pragma omp for nowait
             for (uint64_t i=0; i<size/4; i++){
                 tmp1 = data1_64[i]; 
                 tmp2 = data2_64[i]; 
@@ -305,28 +305,30 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
                 h[ ((tmp1 >> tail2 & mask) << b) + (tmp2 >> tail2 & mask) ]++;
                 h[ ((tmp1 >> tail3 & mask) << b) + (tmp2 >> tail3 & mask) ]++;
             }
-            // TODO: A way to choose between *reduce* or *critical*
+            // TODO: An option to choose between *reduce* and *critical*
             //#pragma omp critical
             //for (uint64_t j=0; j<(1<<(b*2));j++){
             //    hist[j] += h[j];
             //}
             //free(h);
-            #pragma omp single
-            reduce(hs, 1<<(b*2), 0, n);
-            #pragma omp barrier
+        }
+    }
+    if (atomic == 0){
+        reduce(hs, 1<<(b*2), 0, n);
+        #pragma omp parallel
+        {
+            manage_thread_affinity();
             #pragma omp for
             for (uint64_t i=0; i<1<<(b*2); i++){
                 hist[i]=hs[0][i];
             }
-
         }
-    }
-    if (atomic == 0){
         for (int i=0; i<n; i++){
             free(hs[i]);
         }
         free(hs);
     }
+
     // The data that doesn't fit in 64bit chunks, openmp would be overkill here.
     for (int i=size-(size%4); i<size; i++){
         hist[ ((data1[i]>>tail0)<<b) + (data2[i]>>tail0) ]++;
