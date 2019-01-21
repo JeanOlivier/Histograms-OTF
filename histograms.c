@@ -164,8 +164,13 @@ void swap_histogram2d(uint64_t *hist, const int b)
 {
     uint64_t rsize = 1<<b;     // Number AND Size of rows (because it's a square)
     swap_histogram(hist, 2*b); // Vertical swap
-    for (uint64_t i=0; i<rsize; i++){ // For each row
-        swap_histogram(hist+(i*rsize), b); // Horizontal swap of each row
+    #pragma omp parallel
+    {
+        manage_thread_affinity();
+        #pragma omp for
+        for (uint64_t i=0; i<rsize; i++){ // For each row
+            swap_histogram(hist+(i*rsize), b); // Horizontal swap of each row
+        }
     }
 }
 
