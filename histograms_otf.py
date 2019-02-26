@@ -40,10 +40,10 @@ else:
     except:
         omp = ctypes.CDLL("libgomp.so")
 set_num_threads = omp.omp_set_num_threads
-set_num_threads.argtypes=(ctypes.c_int,)
+set_num_threads.argtypes=(c_int,)
 set_num_threads.restype=None
 get_num_threads = omp.omp_get_max_threads
-get_num_threads.restype=ctypes.c_int
+get_num_threads.restype=c_int
 get_num_threads.argtypes=None
 
 
@@ -61,25 +61,25 @@ def hist1dNbits(x, n=8):
         fct = lib['histogram8_signed' if signed else 'histogram8_unsigned']
         fct.argtypes = (
             ndpointer(
-                dtype=ctypes.c_int8 if signed else ctypes.c_uint8,
+                dtype=c_int8 if signed else c_uint8,
                 shape=(len(x),)
             ),
-            ctypes.c_uint64,
-            ndpointer(dtype=ctypes.c_uint64, shape=(k,))
+            c_uint64,
+            ndpointer(dtype=c_uint64, shape=(k,))
         )
     else:
         fct = lib['histogram16_signed' if signed else 'histogram16_unsigned']
         fct.argtypes = (
             ndpointer(
-                dtype=ctypes.c_int16 if signed else ctypes.c_uint16,
+                dtype=c_int16 if signed else c_uint16,
                 shape=(len(x),)
             ),
-            ctypes.c_uint64,
-            ndpointer(dtype=ctypes.c_uint64, shape=(k,)),
-            ctypes.c_int32
+            c_uint64,
+            ndpointer(dtype=c_uint64, shape=(k,)),
+            c_int
         )
 
-    hist = zeros(k, dtype=ctypes.c_uint64)
+    hist = zeros(k, dtype=c_uint64)
     fct(x, len(x), hist) if container8 else fct(x, len(x), hist, n)
     
     return hist
@@ -110,34 +110,34 @@ def hist2dNbits(x, y, n=8, force_n=False, atomic=False):
         fct = lib['histogram2d8_signed' if signed else 'histogram2d8_unsigned']
         fct.argtypes = (
             ndpointer(
-                dtype=ctypes.c_int8 if signed else ctypes.c_uint8,
+                dtype=c_int8 if signed else c_uint8,
                 shape=(len(x),)
             ),
             ndpointer(
-                dtype=ctypes.c_int8 if signed else ctypes.c_uint8,
+                dtype=c_int8 if signed else c_uint8,
                 shape=(len(y),)
             ),
-            ctypes.c_uint64,
-            ndpointer(dtype=ctypes.c_uint64, shape=(k,k))
+            c_uint64,
+            ndpointer(dtype=c_uint64, shape=(k,k))
         )
     else:
         fct = lib['histogram2d16_signed' if signed else 'histogram2d16_unsigned']
         fct.argtypes = (
             ndpointer(
-                dtype=ctypes.c_int16 if signed else ctypes.c_uint16,
+                dtype=c_int16 if signed else c_uint16,
                 shape=(len(x),)
             ),
             ndpointer(
-                dtype=ctypes.c_int16 if signed else ctypes.c_uint16,
+                dtype=c_int16 if signed else c_uint16,
                 shape=(len(y),)
             ),
-            ctypes.c_uint64,
-            ndpointer(dtype=ctypes.c_uint64, shape=(k,k)),
-            ctypes.c_uint64,
-            ctypes.c_uint
+            c_uint64,
+            ndpointer(dtype=c_uint64, shape=(k,k)),
+            c_uint64,
+            c_uint
         )
         
-    hist = zeros((k,k), dtype=ctypes.c_uint64)
+    hist = zeros((k,k), dtype=c_uint64)
     fct(x, y, len(x), hist) if container8 else fct(x, y, len(x), hist, n, a)
     
     return hist
