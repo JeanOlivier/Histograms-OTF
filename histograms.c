@@ -211,7 +211,7 @@ void histogram2d8_unsigned(uint8_t *data1, uint8_t *data2, uint64_t size, uint64
 }
 
 
-void histogram2d8_signed(uint8_t *data1, uint8_t *data2, uint64_t size, uint64_t *hist)
+void histogram2d8_signed(int8_t *data1, int8_t *data2, uint64_t size, uint64_t *hist)
 {
     uint8_t *data1_unsigned = (uint8_t *) data1;
     uint8_t *data2_unsigned = (uint8_t *) data2;
