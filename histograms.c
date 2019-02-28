@@ -95,7 +95,7 @@ void histogram8_unsigned(uint8_t *data, uint64_t size, uint64_t *hist)
         }
     }
     // The data that doesn't fit in 64bit chunks, openmp would be overkill here.
-    for (int i=size-(size%8); i<size; i++){
+    for (uint64_t i=size-(size%8); i<size; i++){
         hist[ data[i] ]++; 
     }
 }
@@ -128,7 +128,7 @@ void histogram16_unsigned(uint16_t *data, uint64_t size, uint64_t *hist, const i
         }
     }
     // The data that doesn't fit in 64bit chunks, openmp would be overkill here.
-    for (int i=size-(size%4); i<size; i++){
+    for (uint64_t i=size-(size%4); i<size; i++){
         hist[ data[i] >> tail ]++; 
     }
 }
@@ -205,7 +205,7 @@ void histogram2d8_unsigned(uint8_t *data1, uint8_t *data2, uint64_t size, uint64
         }
     }
     // The data that doesn't fit in 64bit chunks, openmp would be overkill here.
-    for (int i=size-(size%8); i<size; i++){
+    for (uint64_t i=size-(size%8); i<size; i++){
         hist[ (data1[i]<<8) + data2[i] ]++;
     }
 }
@@ -335,7 +335,7 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
     }
 
     // The data that doesn't fit in 64bit chunks, openmp would be overkill here.
-    for (int i=size-(size%4); i<size; i++){
+    for (uint64_t i=size-(size%4); i<size; i++){
         hist[ ((data1[i]>>tail0)<<b) + (data2[i]>>tail0) ]++;
     }
 }
