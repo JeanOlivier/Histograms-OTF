@@ -7,7 +7,7 @@ import platform
 from numpy.ctypeslib import ndpointer
 from numpy import zeros, fromstring
 from numpy import int8, uint8, int16, uint16
-from ctypes import c_uint8, c_int8, c_uint16, c_int16, c_double, c_int, c_uint64
+from ctypes import c_uint8, c_int8, c_uint16, c_int16, c_double, c_int, c_uint64, c_uint
 
 libpath = os.path.abspath(os.path.dirname(__file__))
 if not libpath in os.environ['PATH']:
@@ -47,8 +47,9 @@ get_num_threads.restype=c_int
 get_num_threads.argtypes=None
 
 
-def hist1dNbits(x, n=8):
+def hist1dNbits(x, n=8, ihist=None):
     """
+    *ihist* is for using a previously filled histogram and keep filling it.
     """
     signed = True if (x.dtype in [int8, int16]) else False
     container8 = x.dtype in [int8, uint8]
@@ -78,14 +79,24 @@ def hist1dNbits(x, n=8):
             ndpointer(dtype=c_uint64, shape=(k,)),
             c_int
         )
-
-    hist = zeros(k, dtype=c_uint64)
-    fct(x, len(x), hist) if container8 else fct(x, len(x), hist, n)
     
+
+    if ihist is None:
+        hist = zeros(k, dtype=c_uint64)
+    else:
+        assert ihist.size == k, "*ihist* has wrong size"
+        if signed:
+            swap_histogram = lib['swap_histogram'] 
+            swap_histogram.argtypes = (ndpointer(dtype=c_uint64, shape=(k,)), c_int)
+            swap_histogram(ihist, 8 if container8 else n)
+        hist = ihist
+
+    fct(x, len(x), hist) if container8 else fct(x, len(x), hist, n)
+
     return hist
 
 
-def hist2dNbits(x, y, n=8, force_n=False, atomic=False):
+def hist2dNbits(x, y, n=8, force_n=False, atomic=False, ihist=None):
     """
     No atomic chosen heuristically as a sweet spot for:
         - somewhat correlated data
@@ -137,7 +148,15 @@ def hist2dNbits(x, y, n=8, force_n=False, atomic=False):
             c_uint
         )
         
-    hist = zeros((k,k), dtype=c_uint64)
+    if ihist is None:
+        hist = zeros((k,k), dtype=c_uint64)
+    else:
+        assert ihist.size == k**2, "*ihist* has wrong size"
+        if signed:
+            swap_histogram2d = lib['swap_histogram2d'] 
+            swap_histogram2d.argtypes = (ndpointer(dtype=c_uint64, shape=(k,k)), c_int)
+            swap_histogram2d(ihist, 8 if container8 else n)
+        hist = ihist
     fct(x, y, len(x), hist) if container8 else fct(x, y, len(x), hist, n, a)
     
     return hist

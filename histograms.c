@@ -325,7 +325,7 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
             manage_thread_affinity();
             #pragma omp for
             for (uint64_t i=0; i<1<<(b*2); i++){
-                hist[i]=hs[0][i];
+                hist[i]+=hs[0][i];
             }
         }
         for (int i=0; i<n; i++){
