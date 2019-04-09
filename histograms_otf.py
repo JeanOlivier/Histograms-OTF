@@ -8,6 +8,9 @@ from numpy.ctypeslib import ndpointer
 from numpy import zeros, fromstring
 from numpy import int8, uint8, int16, uint16
 from ctypes import c_uint8, c_int8, c_uint16, c_int16, c_double, c_int, c_uint64, c_uint
+import operator as op
+from functools import reduce
+
 
 libpath = os.path.abspath(os.path.dirname(__file__))
 if not libpath in os.environ['PATH']:
@@ -160,3 +163,31 @@ def hist2dNbits(x, y, n=8, force_n=False, atomic=False, ihist=None):
     fct(x, y, len(x), hist) if container8 else fct(x, y, len(x), hist, n, a)
     
     return hist
+
+
+# Extra stuff: Computing moments and cumulants on histograms
+
+# n choose r: n!/(r!(n-r)!)
+def ncr(n, r):
+    r = min(r, n-r)
+    numer = reduce(op.mul, range(n, n-r, -1), 1)
+    denom = reduce(op.mul, range(1, r+1), 1)
+    return numer / denom
+
+# kth moment of h, centered by default
+def moment(h, k, centered=True):
+    if centered:
+        bshift = double(moment(h, 1, centered=False))
+    else: 
+        bshift = 0
+    b = double(arange(h.size))-bshift
+    n = double(h.sum())
+    return (h*b**k).sum()/n
+
+def cumulant(h, k, centered=True):
+    hh = double(h)
+    ret = moment(hh,k,False)
+    ret -= sum([ncr(k-1,m-1)*cumulant(hh,m)*moment(hh,k-m,False) for m in range(1,k)])
+    return ret
+
+
