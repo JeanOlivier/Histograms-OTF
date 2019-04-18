@@ -5,8 +5,8 @@ import ctypes
 import sys, os
 import platform
 from numpy.ctypeslib import ndpointer
-from numpy import zeros, fromstring
-from numpy import int8, uint8, int16, uint16
+from numpy import zeros, fromstring, arange, log2
+from numpy import int8, uint8, int16, uint16, double
 from ctypes import c_uint8, c_int8, c_uint16, c_int16, c_double, c_int, c_uint64, c_uint
 import operator as op
 from functools import reduce
@@ -167,6 +167,7 @@ def hist2dNbits(x, y, n=8, force_n=False, atomic=False, ihist=None):
 
 # Extra stuff: Computing moments and cumulants on histograms
 
+#Python implementation
 # n choose r: n!/(r!(n-r)!)
 def ncr(n, r):
     r = min(r, n-r)
@@ -175,19 +176,48 @@ def ncr(n, r):
     return numer / denom
 
 # kth moment of h, centered by default
-def moment(h, k, centered=True):
+def moment_py(h, k, centered=True):
     if centered:
-        bshift = double(moment(h, 1, centered=False))
+        bshift = double(moment_py(h, 1, centered=False))
     else: 
         bshift = 0
     b = double(arange(h.size))-bshift
     n = double(h.sum())
     return (h*b**k).sum()/n
 
-def cumulant(h, k, centered=True):
+def cumulant_py(h, k, centered=True):
     hh = double(h)
-    ret = moment(hh,k,False)
-    ret -= sum([ncr(k-1,m-1)*cumulant(hh,m)*moment(hh,k-m,False) for m in range(1,k)])
+    ret = moment_py(hh,k,False)
+    ret -= sum([ncr(k-1,m-1)*cumulant_py(hh,m)*moment_py(hh,k-m,False) for m in range(1,k)])
     return ret
 
+# C implementation
+def moment(h, k, centered=True):
+    b = int(log2(len(h))) # Assumes h is a b-bit histogram
+    c = int(centered)
+    fct = lib['moment']
+    fct.argtypes = (
+            ndpointer(
+                dtype=c_uint64,
+                shape=(len(h),)
+            ),
+            c_int,
+            c_int,
+            c_int
+        )
+    fct.restype = c_double
+    return fct(h, b, k, c)
 
+def cumulant(h, k):
+    b = int(log2(len(h))) # Assumes h is a b-bit histogram
+    fct = lib['cumulant']
+    fct.argtypes = (
+            ndpointer(
+                dtype=c_uint64,
+                shape=(len(h),)
+            ),
+            c_int,
+            c_int
+        )
+    fct.restype = c_double
+    return fct(h, b, k)
