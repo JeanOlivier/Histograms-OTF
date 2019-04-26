@@ -372,10 +372,19 @@ double moment(uint64_t *hist, const int b, const int k, const int centered)
     #pragma omp parallel
     {
         manage_thread_affinity(); // For 64+ logical cores on Windows
-        #pragma omp for reduction(+:val), reduction(+:n)
-        for (int i=0; i<size; i++){
-            val += (long double)hist[i] * powl((long double)i - (long double)bshift, k);
-            n += hist[i];
+        if (centered){
+            #pragma omp for reduction(+:val), reduction(+:n)
+            for (int i=0; i<size; i++){
+                val += (long double)hist[i] * powl((long double)i - (long double)bshift, k);
+                n += hist[i];
+            }
+        }
+        else{
+            #pragma omp for reduction(+:val), reduction(+:n)
+            for (int i=0; i<size; i++){
+                val += (long double)hist[i] * powl((long double)i, k);
+                n += hist[i];
+            }
         }
     }
     return (double)(val/(long double)n);
