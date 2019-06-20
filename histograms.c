@@ -255,7 +255,12 @@ void reduce(uint64_t** arrs, uint64_t bins, uint64_t begin, uint64_t end)
 // atomic: 0 = no atomic; 1 = full atomic 
 // Best value depends on data. 
 //  - Full atomic is better for random data and large b
-//  - no atomic is better for correlated data
+//  - No atomic is better for correlated data
+//
+// The performance bottleneck seems to be the reduction of huge arrays -> lots of additions.
+// Using critical reduction in the non-atomic case shows CPU load decreasing greatly after a
+// short while but a few cores still at 100% (probably reducing critically). 
+// The reduce function above reduces manually in non-critical mode to speed this up.
 void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uint64_t *hist, const uint32_t b, const int atomic)
 {
     // Precomputing the correct mask and shift values. Helps readability, doesn't  really help performance. 
@@ -265,43 +270,52 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
     const int32_t tail3 = tail2+16;
     const int32_t mask = (1<<b)-1; // Right amount of 0b1
 
-    uint64_t **hs;
-    int n;
-
     uint64_t *data1_64 = (uint64_t *) data1;
     uint64_t *data2_64 = (uint64_t *) data2;
-    #pragma omp parallel
-    {
-        manage_thread_affinity(); // For 64+ logical cores on Windows
-        n = omp_get_num_threads();
-        
-        uint64_t tmp1=0;
-        uint64_t tmp2=0;
-        // Full atomic should be faster when there's low memory collision, e.g. random data or large *b*.
-        // Strikingly, for a given set of data it's typically faster for large *b*.
-        if (atomic == 1){
-            // No local histogram; no reduction!
-            #pragma omp for //reduction(+:h[:1<<(b*2)])  
-            for (uint64_t i=0; i<size/4; i++){
-                tmp1 = data1_64[i]; 
-                tmp2 = data2_64[i]; 
-                #pragma omp atomic update
-                hist[ ((tmp1 >> tail0 & mask) << b) + (tmp2 >> tail0 & mask) ]++;   
-                #pragma omp atomic update
-                hist[ ((tmp1 >> tail1 & mask) << b) + (tmp2 >> tail1 & mask) ]++;
-                #pragma omp atomic update
-                hist[ ((tmp1 >> tail2 & mask) << b) + (tmp2 >> tail2 & mask) ]++;
-                #pragma omp atomic update
-                hist[ ((tmp1 >> tail3 & mask) << b) + (tmp2 >> tail3 & mask) ]++;
+    if (atomic==1){
+        #pragma omp parallel
+        {
+            manage_thread_affinity(); // For 64+ logical cores on Windows
+            
+            uint64_t tmp1=0;
+            uint64_t tmp2=0;
+            // Full atomic should be faster when there's low memory collision, e.g. random data or large *b*.
+            // Strikingly, for a given set of data it's typically faster for large *b*.
+            if (atomic == 1){
+                // No local histogram; no reduction!
+                #pragma omp for //reduction(+:h[:1<<(b*2)])  
+                for (uint64_t i=0; i<size/4; i++){
+                    tmp1 = data1_64[i]; 
+                    tmp2 = data2_64[i]; 
+                    #pragma omp atomic update
+                    hist[ ((tmp1 >> tail0 & mask) << b) + (tmp2 >> tail0 & mask) ]++;   
+                    #pragma omp atomic update
+                    hist[ ((tmp1 >> tail1 & mask) << b) + (tmp2 >> tail1 & mask) ]++;
+                    #pragma omp atomic update
+                    hist[ ((tmp1 >> tail2 & mask) << b) + (tmp2 >> tail2 & mask) ]++;
+                    #pragma omp atomic update
+                    hist[ ((tmp1 >> tail3 & mask) << b) + (tmp2 >> tail3 & mask) ]++;
+                }
             }
         }
-        // Using local histograms that have to be reduced afterwards 
-        else{
-            #pragma omp single
+    }
+    // Using local histograms that have to be reduced afterwards 
+    // OpenMP allocates its reduction arrays on the stack -> stack overflow for huge arrays
+    else{
+        uint64_t **hs;
+        int n;
+        #pragma omp parallel
+        {
+            manage_thread_affinity(); // For 64+ logical cores on Windows
+            n = omp_get_num_threads(); // Amount of threads
+            
+            #pragma omp single // Affects only next line
             hs = (uint64_t **) malloc(n * sizeof(uint64_t));
             uint64_t *h = (uint64_t *) calloc(1<<(b*2), sizeof(uint64_t)); // Filled with 0s.
             hs[omp_get_thread_num()] = h;
             
+            uint64_t tmp1=0;
+            uint64_t tmp2=0;
             #pragma omp for nowait
             for (uint64_t i=0; i<size/4; i++){
                 tmp1 = data1_64[i]; 
@@ -311,19 +325,13 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
                 h[ ((tmp1 >> tail2 & mask) << b) + (tmp2 >> tail2 & mask) ]++;
                 h[ ((tmp1 >> tail3 & mask) << b) + (tmp2 >> tail3 & mask) ]++;
             }
-            // TODO: An option to choose between *reduce* and *critical*
-            //#pragma omp critical
-            //for (uint64_t j=0; j<(1<<(b*2));j++){
-            //    hist[j] += h[j];
-            //}
-            //free(h);
         }
-    }
-    if (atomic == 0){
-        reduce(hs, 1<<(b*2), 0, n);
+        // Critical reduction was very slow, this is faster.
+        reduce(hs, 1<<(b*2), 0, n); // hs[0] is the reduced array afterwards
         #pragma omp parallel
         {
             manage_thread_affinity();
+            // Returning the result to the output array
             #pragma omp for
             for (uint64_t i=0; i<1<<(b*2); i++){
                 hist[i]+=hs[0][i];
@@ -335,7 +343,7 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
         free(hs);
     }
 
-    // The data that doesn't fit in 64bit chunks, openmp would be overkill here.
+    // The data that doesn't fit in 64bit chunks, OpenMP would be overkill here.
     for (uint64_t i=size-(size%4); i<size; i++){
         hist[ ((data1[i]>>tail0)<<b) + (data2[i]>>tail0) ]++;
     }
