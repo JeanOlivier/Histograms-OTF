@@ -4,7 +4,7 @@ PKG_CFG = $(OS:Windows_NT=x86_64-w64-mingw32-)pkg-config
 RM = rm
 
 # flags
-CFLAGS = -O3 -march=native -Wall
+CFLAGS = -Ofast -march=native -Wall 
 OMPFLAGS = -fopenmp -fopenmp-simd
 SHRFLAGS = -fPIC -shared
 
@@ -13,8 +13,6 @@ LDLIBS = -lmpfr
 
 # filenames
 SRC = histograms.c
-EXT = $(if $(filter $(OS),Windows_NT),.exe,.out)
-TARGET = $(SRC:.c=$(EXT))
 SHREXT = $(if $(filter $(OS),Windows_NT),.dll,.so)
 SHRTGT = $(SRC:.c=$(SHREXT))
 
@@ -25,11 +23,9 @@ $(SHRTGT): $(SRC)
 	$(CC) $(SRC) -o $(SHRTGT) $(SHRFLAGS) $(CFLAGS) $(OMPFLAGS) $(LDLIBS)
 
 force: 
-	$(CC) $(SRC) -o $(TARGET) $(CFLAGS) $(OMPFLAGS) $(LDLIBS)
 	$(CC) $(SRC) -o $(SHRTGT) $(SHRFLAGS) $(CFLAGS) $(OMPFLAGS) $(LDLIBS)
 
 clean:
-	@[ -f $(TARGET) ] && $(RM) $(TARGET) || true
 	@[ -f $(SHRTGT) ] && $(RM) $(SHRTGT) || true
 
 .PHONY: all clean force 
