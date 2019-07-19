@@ -18,6 +18,46 @@
 #include <math.h>
 
 
+static inline void to_hist_float(const float* p_tmp1,const float p_L_bin,const float p_max,const uint8_t n ,uint64_t* hist){ 	
+	
+	const float tmp1 = *p_tmp1;
+	const float max = p_max;
+	
+	if (tmp1 >= max){
+		// clipping
+		hist[(1<<n)-1]++; // add one to last bin 
+	}
+	else if (tmp1 < -(max)){
+		// clipping
+		hist[0]++; // add one to first bin
+	}
+	else{
+	uint16_t tmp2 = (uint16_t)((tmp1+max)/(p_L_bin));
+	hist[ tmp2 ]++;
+	}
+}	
+
+static inline void to_hist_double(const double* p_tmp1,const double p_L_bin,const double p_max,const uint8_t n,uint64_t* hist){ 	
+	
+	const double  tmp1 = *p_tmp1;
+	const double max = p_max;
+	
+	if (tmp1 >= max){
+		// clipping
+		hist[(1<<n)-1]++; // add one to last bin 
+	}
+	else if (tmp1 < -(max)){
+		// clipping
+		hist[0]++; // add one to first bin	
+	}
+	else{
+	uint16_t tmp2 = (uint16_t)((tmp1+max)/(p_L_bin));
+	hist[ tmp2 ]++;
+	}
+}	
+	
+
+
 // Windows doesn't really like systems with over 64 logical cores.
 // This function assign the thread it's called from to a core, bypassing the 
 // default assignation. It alternates between CPU Groups to assign a thread to
@@ -142,6 +182,53 @@ void histogram16_signed(int16_t *data, uint64_t size, uint64_t *hist, const int 
     swap_histogram(hist, b);
 }
 
+
+// Histogramme1D_Float V0.1
+// 		- Assumes that bin are symetrically distributed around zero.
+// 		- The number of bin is always even (2**n) and n is assumed to be in [8 to 16]
+// 		- Makes a small error on binning related to a few float * and +
+// 		- Bin defined are as folow : [-max to -max+L_bin[; [-max +L_bin to -max+2*L_bin[ ... ; [max - L_bin to max[
+
+	
+void histogram_single(const float *data,  const uint64_t size, uint64_t *hist,const uint8_t n, const float max)
+{   
+	const uint16_t N_bin = 1<<n ;
+	const float L_bin = 2*max/N_bin;
+	const uint64_t *p_data_64 = (uint64_t *) data;
+	
+    #pragma omp parallel
+    {
+		manage_thread_affinity(); // For 64+ logical cores on Windows
+		#pragma omp for reduction(+:hist[:N_bin]) 
+		for (uint64_t i=0; i<size/2; i++){
+			float* p_tmp1 = (float*)(p_data_64 + i);
+			float* p_tmp2 = p_tmp1 + 1;	
+			
+			to_hist_float(p_tmp1, L_bin, max, n, hist);
+			to_hist_float(p_tmp2, L_bin, max, n, hist);
+		}
+    }
+	// The data that doesn't fit in 64bit chunks, openmp would be overkill here.
+	for (uint64_t i= 2*(size/2); i< 2*(size/2) + size%2; i++){
+		to_hist_float( (data+i), L_bin, max, n, hist );	
+		}
+}
+
+void histogram_double( double *data,  uint64_t size, uint64_t *hist, uint8_t n, double max)
+{   
+	 uint16_t N_bin = 1<<n ;
+	 double L_bin = 2*max/N_bin;
+	
+    #pragma omp parallel
+    {
+		manage_thread_affinity(); // For 64+ logical cores on Windows
+		#pragma omp for reduction(+:hist[:N_bin]) 
+		for (uint64_t i=0; i<size; i++){
+			to_hist_double( (data+i), L_bin, max,n, hist );
+		}
+    }
+}
+//////
 
 // #Python POC implementation of the 2d swap, simple but not optimal: 
 //  

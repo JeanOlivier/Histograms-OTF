@@ -6,8 +6,8 @@ import sys, os
 import platform
 from numpy.ctypeslib import ndpointer
 from numpy import zeros, fromstring, arange, log2
-from numpy import int8, uint8, int16, uint16, double
-from ctypes import c_uint8, c_int8, c_uint16, c_int16, c_double, c_int, c_uint64, c_uint
+from numpy import int8, uint8, int16, uint16, single, double
+from ctypes import c_uint8, c_int8, c_uint16, c_int16, c_float, c_double, c_int, c_uint64, c_uint
 import operator as op
 from functools import reduce
 
@@ -50,10 +50,12 @@ get_num_threads.restype=c_int
 get_num_threads.argtypes=None
 
 
-def hist1dNbits(x, n=8, ihist=None):
+def hist1dNbits(x, n=8, ihist=None, max = 1):
     """
     *ihist* is for using a previously filled histogram and keep filling it.
     """
+    float32 = True if (x.dtype in [single]) else False
+    float64 = True if (x.dtype in [double]) else False
     signed = True if (x.dtype in [int8, int16]) else False
     container8 = x.dtype in [int8, uint8]
     assert n in range(8,16+1), "Supported bit depths are from 8 to 16"
@@ -61,7 +63,19 @@ def hist1dNbits(x, n=8, ihist=None):
     k = 2**n 
     #fct = lib['histogram{:d}'.format(n)]
     #if n==8:
-    if container8:
+    if float32|float64:
+        fct = lib['histogram_single' if float32 else 'histogram_double']
+        fct.argtypes = (
+            ndpointer(
+                dtype=c_float if float32 else c_double,
+                shape=(len(x),)
+            ),
+            c_uint64,
+            ndpointer(dtype=c_uint64, shape=(k,)),
+            c_uint8,
+            c_float if float32 else c_double
+        )
+    elif container8:
         fct = lib['histogram8_signed' if signed else 'histogram8_unsigned']
         fct.argtypes = (
             ndpointer(
@@ -82,8 +96,7 @@ def hist1dNbits(x, n=8, ihist=None):
             ndpointer(dtype=c_uint64, shape=(k,)),
             c_int
         )
-    
-
+        
     if ihist is None:
         hist = zeros(k, dtype=c_uint64)
     else:
@@ -94,7 +107,12 @@ def hist1dNbits(x, n=8, ihist=None):
             swap_histogram(ihist, 8 if container8 else n)
         hist = ihist
 
-    fct(x, len(x), hist) if container8 else fct(x, len(x), hist, n)
+    if float32|float64:
+        fct(x, len(x), hist, n, max)
+    elif container8 :
+        fct(x, len(x), hist)
+    else: 
+        fct(x, len(x), hist, n)
 
     return hist
 

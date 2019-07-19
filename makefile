@@ -4,7 +4,10 @@ PKG_CFG = $(OS:Windows_NT=x86_64-w64-mingw32-)pkg-config
 RM = rm
 
 # flags
-CFLAGS = -Ofast -march=native -Wall 
+CFLAGS = -Ofast -march=native -Wall
+#CFLAGS = -O3 -march=native  -Wall
+#CFLAGS = -Ofast -march=native -fno-math-errno  -Wall
+#CFLAGS = -Ofast -march=native -ffast-math  -Wall
 OMPFLAGS = -fopenmp -fopenmp-simd
 SHRFLAGS = -fPIC -shared
 
