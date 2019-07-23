@@ -281,21 +281,19 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
             uint64_t tmp2=0;
             // Full atomic should be faster when there's low memory collision, e.g. random data or large *b*.
             // Strikingly, for a given set of data it's typically faster for large *b*.
-            if (atomic == 1){
-                // No local histogram; no reduction!
-                #pragma omp for //reduction(+:h[:1<<(b*2)])  
-                for (uint64_t i=0; i<size/4; i++){
-                    tmp1 = data1_64[i]; 
-                    tmp2 = data2_64[i]; 
-                    #pragma omp atomic update
-                    hist[ ((tmp1 >> tail0 & mask) << b) + (tmp2 >> tail0 & mask) ]++;   
-                    #pragma omp atomic update
-                    hist[ ((tmp1 >> tail1 & mask) << b) + (tmp2 >> tail1 & mask) ]++;
-                    #pragma omp atomic update
-                    hist[ ((tmp1 >> tail2 & mask) << b) + (tmp2 >> tail2 & mask) ]++;
-                    #pragma omp atomic update
-                    hist[ ((tmp1 >> tail3 & mask) << b) + (tmp2 >> tail3 & mask) ]++;
-                }
+            // No local histogram; no reduction!
+            #pragma omp for //reduction(+:h[:1<<(b*2)])  
+            for (uint64_t i=0; i<size/4; i++){
+                tmp1 = data1_64[i]; 
+                tmp2 = data2_64[i]; 
+                #pragma omp atomic update
+                hist[ ((tmp1 >> tail0 & mask) << b) + (tmp2 >> tail0 & mask) ]++;   
+                #pragma omp atomic update
+                hist[ ((tmp1 >> tail1 & mask) << b) + (tmp2 >> tail1 & mask) ]++;
+                #pragma omp atomic update
+                hist[ ((tmp1 >> tail2 & mask) << b) + (tmp2 >> tail2 & mask) ]++;
+                #pragma omp atomic update
+                hist[ ((tmp1 >> tail3 & mask) << b) + (tmp2 >> tail3 & mask) ]++;
             }
         }
     }
