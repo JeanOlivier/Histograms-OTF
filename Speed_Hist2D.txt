@@ -1,0 +1,61 @@
+i5-5200U (2 cores, 4 threads)
+	~ 2.6 GHz
+	(L1,L2,L3) = (128,512,3000)kBytes
+Deux vecteurs gaussien 
+	10**8 points (float)
+#bins
+	(2**n)**2; n=12 ou 10 ou 8;
+
+Serial default n=12 : 1.72 [s]
+Serial Uint8   n=12 : 1.37 [s]
+Nb Thread = 4
+	Parralel Atomic default n=12 : 1.29 [s]
+	Parralel Reduction default  n=12 : 1.25 [s]
+	Parralel Full-Atomic uint8  n=12 : 1.06 [s] % Peut faire des erreurs ?
+	Parralel Part-Atomic uint8  n=12 : 1.02 [s] % Sans erreur ~40% plus rapide 
+	Parralel 2xReduction uint8  n=12 : 1.29 [s] % Trop compliquer pour rien
+No hyperthreading (i.e. nb Thread =2) (doubles all-Cache ?)
+	Parralel Atomic default n=12 : 1.70 [s]
+	Parralel Reduction default  n=12 : 1.25 [s]
+	Parralel Full-Atomic uint8  n=12 : 1.35 [s] % Peut faire des erreurs ?
+	Parralel Part-Atomic uint8  n=12 : 1.12 [s] % Sans erreur
+	Parralel 2xReduction uint8  n=12 : 1.27 [s] % Trop compliquer pour rien
+
+//// n=10
+Serial default n=10 : 591 [ms]
+Serial Uint8   n=10 : 487 [ms]
+Nb Thread = 4
+	Parralel Atomic default n=10 : 483[ms]
+	Parralel Reduction default  n=10 : 688 [ms]
+	Parralel Full-Atomic uint8  n=10 : 956 [ms] % Peut faire des erreurs ?
+	Parralel Part-Atomic uint8  n=10 : 281 [ms] % Sans erreur ~52% plus rapide 
+	Parralel 2xReduction uint8  n=10 : 290 [ms] % Trop compliquer pour rien
+//////////
+Sur le serveur :
+
+Deux vecteurs gaussien 
+	10**9 points (float)
+#bins
+	(2**n)**2; n=12 ou 10 ou 8;
+
+
+Intel Xeon E5-2697 v4 (Dual socket, 18 cores (total 36), 36 threads (total 72))
+	Per socket (L1i, L1d, L2, L3) = (32, 32, 256, 45000)kBytes
+Serial default n=12 : [s]
+Serial Uint8 Atomic=3 n=12 : [s]
+Nb Thread = 72
+	Parralel Atomic default n=12 : [s]
+	Parralel Reduction default  n=12 : [s]
+	Parralel Full-Atomic uint8  n=12 : [s] % Peut faire des erreurs ?
+	Parralel Part-Atomic uint8  n=12 : [s] % Sans erreur ~40% plus rapide 
+	Parralel 2xReduction uint8  n=12 : [s] % Trop compliquer pour rien
+No hyperthreading
+	Parralel Atomic default n=12 : [s]
+	Parralel Reduction default  n=12 : [s]
+	Parralel Full-Atomic uint8  n=12 : [s] % Peut faire des erreurs ?
+	Parralel Part-Atomic uint8  n=12 : [s] % Sans erreur
+	Parralel 2xReduction uint8  n=12 : [s] % Trop compliquer pour rien
+	
+
+	
+

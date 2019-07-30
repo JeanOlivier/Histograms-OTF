@@ -1,97 +1,4 @@
-#if defined(__CYGWIN__) || defined(__MINGW64__)
-    // see number from: sdkddkver.h
-    // https://docs.microsoft.com/fr-fr/windows/desktop/WinProg/using-the-windows-headers
-    #define _WIN32_WINNT 0x0602 // Windows 8
-    #include <Processtopologyapi.h>
-    #include <processthreadsapi.h>
-#endif
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <assert.h>
-
-#include <omp.h>
-#include "mpfr.h"
-
-#define __STDC_FORMAT_MACROS
-#include <inttypes.h>
-#include <math.h>
-
-
-static inline void to_hist_float(const float* p_tmp1,const float p_L_bin,const float p_max,const uint8_t n ,uint64_t* hist){ 	
-	
-	const float tmp1 = *p_tmp1;
-	const float max = p_max;
-	
-	if (tmp1 >= max){
-		// clipping
-		hist[(1<<n)-1]++; // add one to last bin 
-	}
-	else if (tmp1 < -(max)){
-		// clipping
-		hist[0]++; // add one to first bin
-	}
-	else{
-	uint16_t tmp2 = (uint16_t)((tmp1+max)/(p_L_bin));
-	hist[ tmp2 ]++;
-	}
-}	
-
-static inline void to_hist_double(const double* p_tmp1,const double p_L_bin,const double p_max,const uint8_t n,uint64_t* hist){ 	
-	
-	const double  tmp1 = *p_tmp1;
-	const double max = p_max;
-	
-	if (tmp1 >= max){
-		// clipping
-		hist[(1<<n)-1]++; // add one to last bin 
-	}
-	else if (tmp1 < -(max)){
-		// clipping
-		hist[0]++; // add one to first bin	
-	}
-	else{
-	uint16_t tmp2 = (uint16_t)((tmp1+max)/(p_L_bin));
-	hist[ tmp2 ]++;
-	}
-}	
-	
-
-
-// Windows doesn't really like systems with over 64 logical cores.
-// This function assign the thread it's called from to a core, bypassing the 
-// default assignation. It alternates between CPU Groups to assign a thread to
-// each physical core first; then it can make use of HTT.
-//
-// This could be much more sophisticated, but it works well for dual identical
-// cpu systems with HTT on and over 64 logical cores.
-void manage_thread_affinity()
-{
-    #ifdef _WIN32_WINNT
-        int nbgroups = GetActiveProcessorGroupCount();
-        int *threads_per_groups = (int *) malloc(nbgroups*sizeof(int));
-        for (int i=0; i<nbgroups; i++)
-        {
-            threads_per_groups[i] = GetActiveProcessorCount(i);
-        }
-
-        // Fetching thread number and assigning it to cores
-        int tid = omp_get_thread_num(); // Internal omp thread number (0 -- OMP_NUM_THREADS)
-        HANDLE thandle = GetCurrentThread();
-        _Bool result;
-        
-        int set_group = tid%nbgroups; // We change group for each thread
-        int nbthreads = threads_per_groups[set_group]; // Nb of threads in group for affinity mask.
-        GROUP_AFFINITY group = {((uint64_t)1<<nbthreads)-1, set_group}; // nbcores amount of 1 in binary
-                
-        result = SetThreadGroupAffinity(thandle, &group, NULL); // Actually setting the affinity
-        if(!result) fprintf(stderr, "Failed setting output for tid=%i\n", tid);
-        free(threads_per_groups);
-    #else
-        //We let openmp and the OS manage the threads themselves
-    #endif
-}
-
+#include "../includes/histo_shared.h"
 // To store an i-bits value in a j-bits integer, with j being a power of 2,
 // you need at least j = 2**( log(i)/log(2) + (1-(log(i)/log(2)%1)/1)%1 )
 
@@ -182,54 +89,6 @@ void histogram16_signed(int16_t *data, uint64_t size, uint64_t *hist, const int 
     swap_histogram(hist, b);
 }
 
-
-// Histogramme1D_Float V0.1
-// 		- Assumes that bin are symetrically distributed around zero.
-// 		- The number of bin is always even (2**n) and n is assumed to be in [8 to 16]
-// 		- Makes a small error on binning related to a few float * and +
-// 		- Bin defined are as folow : [-max to -max+L_bin[; [-max +L_bin to -max+2*L_bin[ ... ; [max - L_bin to max[
-
-	
-void histogram_single(const float *data,  const uint64_t size, uint64_t *hist,const uint8_t n, const float max)
-{   
-	const uint16_t N_bin = 1<<n ;
-	const float L_bin = 2*max/N_bin;
-	const uint64_t *p_data_64 = (uint64_t *) data;
-	
-    #pragma omp parallel
-    {
-		manage_thread_affinity(); // For 64+ logical cores on Windows
-		#pragma omp for reduction(+:hist[:N_bin]) 
-		for (uint64_t i=0; i<size/2; i++){
-			float* p_tmp1 = (float*)(p_data_64 + i);
-			float* p_tmp2 = p_tmp1 + 1;	
-			
-			to_hist_float(p_tmp1, L_bin, max, n, hist);
-			to_hist_float(p_tmp2, L_bin, max, n, hist);
-		}
-    }
-	// The data that doesn't fit in 64bit chunks, openmp would be overkill here.
-	for (uint64_t i= 2*(size/2); i< 2*(size/2) + size%2; i++){
-		to_hist_float( (data+i), L_bin, max, n, hist );	
-		}
-}
-
-void histogram_double( double *data,  uint64_t size, uint64_t *hist, uint8_t n, double max)
-{   
-	 uint16_t N_bin = 1<<n ;
-	 double L_bin = 2*max/N_bin;
-	
-    #pragma omp parallel
-    {
-		manage_thread_affinity(); // For 64+ logical cores on Windows
-		#pragma omp for reduction(+:hist[:N_bin]) 
-		for (uint64_t i=0; i<size; i++){
-			to_hist_double( (data+i), L_bin, max,n, hist );
-		}
-    }
-}
-//////
-
 // #Python POC implementation of the 2d swap, simple but not optimal: 
 //  
 // def swap(x):
@@ -308,30 +167,6 @@ void histogram2d8_signed(int8_t *data1, int8_t *data2, uint64_t size, uint64_t *
 }
 
 
-void reduce(uint64_t** arrs, uint64_t bins, uint64_t begin, uint64_t end)
-{
-    assert(begin < end);
-    if (end - begin == 1) {
-        return;
-    }
-    uint64_t pivot = (begin + end) / 2;
-    /* Moving the termination condition here will avoid very short tasks,
-     * but make the code less nice. */
-    //#pragma omp task
-    reduce(arrs, bins, begin, pivot);
-    //#pragma omp task
-    reduce(arrs, bins, pivot, end);
-    //#pragma omp taskwait
-    /* now begin and pivot contain the partial sums. */
-    #pragma omp parallel 
-    {
-        manage_thread_affinity();
-        #pragma omp for
-        for (uint64_t i = 0; i < bins; i++)
-            arrs[begin][i] += arrs[pivot][i];
-    }
-}
-
 // Computes the 2d histogram for (8<b<=16)-bit samples in uint16 containers
 //
 // The 2d histogram is represented by a single dimension array, logically
@@ -347,7 +182,7 @@ void reduce(uint64_t** arrs, uint64_t bins, uint64_t begin, uint64_t end)
 // The performance bottleneck seems to be the reduction of huge arrays -> lots of additions.
 // Using critical reduction in the non-atomic case shows CPU load decreasing greatly after a
 // short while but a few cores still at 100% (probably reducing critically). 
-// The reduce function above reduces manually in non-critical mode to speed this up.
+// The reduce_uint64 function above reduces manually in non-critical mode to speed this up.
 void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uint64_t *hist, const uint32_t b, const int atomic)
 {
     // Precomputing the correct mask and shift values. Helps readability, doesn't  really help performance. 
@@ -414,7 +249,7 @@ void histogram2d16_unsigned(uint16_t *data1, uint16_t *data2, uint64_t size, uin
             }
         }
         // Critical reduction was very slow, this is faster.
-        reduce(hs, 1<<(b*2), 0, n); // hs[0] is the reduced array afterwards
+        reduce_uint64(hs, 1<<(b*2), 0, n); // hs[0] is the reduced array afterwards
         #pragma omp parallel
         {
             manage_thread_affinity();
@@ -445,50 +280,3 @@ void histogram2d16_signed(int16_t *data1, int16_t *data2, uint64_t size, uint64_
     swap_histogram2d(hist, b);
 }
 
-// Simple, but could be faster
-int64_t nCk(int n, int k)
-{
-    if (k==0){
-        return 1;
-    }
-    return (n*nCk(n-1, k-1))/k; // Product form, division always yields an integer
-}
-
-double moment(uint64_t *hist, const int b, const int k, const int centered)
-{
-    const int size = 1<<b;
-    long double bshift=0;
-    long double val = 0;
-    uint64_t n=0;
-    
-    if (centered){
-        bshift = moment(hist, b, 1, 0);
-    }
-    #pragma omp parallel
-    {
-        manage_thread_affinity(); // For 64+ logical cores on Windows
-        if (centered){
-            #pragma omp for reduction(+:val), reduction(+:n)
-            for (int i=0; i<size; i++){
-                val += (long double)hist[i] * powl((long double)i - (long double)bshift, k);
-                n += hist[i];
-            }
-        }
-        else{
-            #pragma omp for reduction(+:val), reduction(+:n)
-            for (int i=0; i<size; i++){
-                val += (long double)hist[i] * powl((long double)i, k);
-                n += hist[i];
-            }
-        }
-    }
-    return (double)(val/(long double)n);
-}
-
-double cumulant(uint64_t *hist, const int b, const int k){
-    double ret = moment(hist, b, k, 0);
-    for (int i=1; i<k; i++){
-        ret -= (double)nCk(k-1, i-1)*cumulant(hist, b, i)*moment(hist, b, k-i, 0);
-    }
-    return ret;
-}

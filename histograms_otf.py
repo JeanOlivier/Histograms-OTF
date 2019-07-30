@@ -7,9 +7,13 @@ import platform
 from numpy.ctypeslib import ndpointer
 from numpy import zeros, fromstring, arange, log2
 from numpy import int8, uint8, int16, uint16, single, double
-from ctypes import c_uint8, c_int8, c_uint16, c_int16, c_float, c_double, c_int, c_uint64, c_uint
+from ctypes import c_uint8, c_int8, c_uint16, c_int16, c_float, c_double, c_int, c_uint16, c_uint32, c_uint64, c_uint
 import operator as op
 from functools import reduce
+
+# Debuging
+from IPython import get_ipython
+ipython = get_ipython()
 
 
 libpath = os.path.abspath(os.path.dirname(__file__))
@@ -117,7 +121,7 @@ def hist1dNbits(x, n=8, ihist=None, max = 1):
     return hist
 
 
-def hist2dNbits(x, y, n=8, force_n=False, atomic=False, ihist=None):
+def hist2dNbits(x, y, n=8, force_n=False, option="", ihist=None, max=1):
     """
     No atomic chosen heuristically as a sweet spot for:
         - somewhat correlated data
@@ -131,13 +135,51 @@ def hist2dNbits(x, y, n=8, force_n=False, atomic=False, ihist=None):
         assert 8<=n<=12, "8<=n<=12 is required, set kwarg *force_n* to True to override"
     assert len(x)==len(y), "len(x)==len(y) is required"
     assert x.dtype == y.dtype, "x and y should be of the same type"
+    float32 = True if (x.dtype in [single]) else False
+    float64 = True if (x.dtype in [double]) else False
     signed = True if (x.dtype in [int8, int16]) else False
     container8 = x.dtype in [int8, uint8]
-    a = 1 if atomic else 0
     
+    if container8|signed :
+        if (option == "atomic"):
+            OPT = 1 ;
+        else:
+            OPT = 0 ;
+    elif (option == "serial_uint8") :
+        OPT = 1 ;
+    elif (option == "atomic"):
+        OPT = 2 ;
+    elif (option == "par_red"):
+        OPT = 3 ;
+    elif (option == "atomic_uint8"):
+        OPT = 4 ;
+    elif (option == "par_rred"):
+        OPT = 5 ;
+    elif (option == "serial_contiguous"):
+        OPT = 6;
+    else :
+        OPT = 0 ;
+        
     k = 2**n 
-
-    if container8:
+      
+    if float32|float64:
+        fct = lib['histogram2D_single' if float32 else 'histogram2D_double']
+        fct.argtypes = (
+            ndpointer(
+                dtype=c_float if float32 else c_double,
+                shape=(len(x),)
+            ),
+            ndpointer(
+                dtype=c_float if float32 else c_double,
+                shape=(len(y),)
+            ),
+            c_uint64,
+            ndpointer(dtype=c_uint64, shape=(k,k)),
+            c_uint8,
+            c_float if float32 else c_double,
+            c_uint
+        )
+    elif container8:
         assert n==8, "Only 8bit histograms are supported for 8bit containers"
         fct = lib['histogram2d8_signed' if signed else 'histogram2d8_unsigned']
         fct.argtypes = (
@@ -168,7 +210,7 @@ def hist2dNbits(x, y, n=8, force_n=False, atomic=False, ihist=None):
             c_uint64,
             c_uint
         )
-        
+  
     if ihist is None:
         hist = zeros((k,k), dtype=c_uint64)
     else:
@@ -178,7 +220,13 @@ def hist2dNbits(x, y, n=8, force_n=False, atomic=False, ihist=None):
             swap_histogram2d.argtypes = (ndpointer(dtype=c_uint64, shape=(k,k)), c_int)
             swap_histogram2d(ihist, 8 if container8 else n)
         hist = ihist
-    fct(x, y, len(x), hist) if container8 else fct(x, y, len(x), hist, n, a)
+        
+    if float32|float64:
+        fct(x, y, len(x), hist, n, max, OPT)
+    elif container8 :
+        fct(x, y, len(x), hist)
+    else: 
+        fct(x, y, len(x), hist, n, OPT)
     
     return hist
 
