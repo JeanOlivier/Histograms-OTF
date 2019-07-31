@@ -27,8 +27,6 @@ HH = zeros((k,k), dtype=c_uint64)
 ipython.magic ("timeit hist.hist2dNbits(x, y, n, force_n=False, option='', ihist=HH, max=6)");
 HH = zeros((k,k), dtype=c_uint64)
 ipython.magic ("timeit hist.hist2dNbits(x, y, n, force_n=False, option='serial_uint8', ihist=HH, max=6)");
-HH = zeros((k,k), dtype=c_uint64)
-ipython.magic ("timeit hist.hist2dNbits(x, y, n, force_n=False, option='serial_contiguous', ihist=HH, max=6)");
 # HH = zeros((k,k), dtype=c_uint64)
 # ipython.magic ("timeit hist.hist2dNbits(x, y, n, force_n=False, option='atomic', ihist=HH, max=6)");
 # HH = zeros((k,k), dtype=c_uint64)

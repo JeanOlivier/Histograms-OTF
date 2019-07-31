@@ -11,3 +11,5 @@
 *.session
 
 Speed_Test\.txt
+Speed_Hist2D\.txt
+Test\.py

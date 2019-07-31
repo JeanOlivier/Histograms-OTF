@@ -1,13 +1,15 @@
 #!/bin/python
 # -*- coding: utf-8 -*-
 
+import sys, os , platform
+
 import ctypes
-import sys, os
-import platform
 from numpy.ctypeslib import ndpointer
+from ctypes import c_uint8, c_int8, c_uint16, c_int16, c_float, c_double, c_int, c_uint16, c_uint32, c_uint64, c_uint
+
 from numpy import zeros, fromstring, arange, log2
 from numpy import int8, uint8, int16, uint16, single, double
-from ctypes import c_uint8, c_int8, c_uint16, c_int16, c_float, c_double, c_int, c_uint16, c_uint32, c_uint64, c_uint
+
 import operator as op
 from functools import reduce
 
@@ -16,9 +18,9 @@ from IPython import get_ipython
 ipython = get_ipython()
 
 
-libpath = os.path.abspath(os.path.dirname(__file__))
+libpath = os.path.abspath(os.path.dirname(__file__)) # The absolute path of this Python module
 if not libpath in os.environ['PATH']:
-    os.environ['PATH'] = libpath+os.path.pathsep+os.environ['PATH']
+    os.environ['PATH'] = libpath+os.path.pathsep+os.environ['PATH'] # Adds this modules path the the environnement variable PATH
 
 plat_info = dict(plat=platform.system())
 if plat_info['plat'] == 'Windows':
@@ -36,6 +38,7 @@ else:
 if not os.path.isfile(plat_info['lib']):
     raise IOError("{lib} is missing. To compile on {plat}:\n{com}\n".format(**plat_info))
 
+# Use ctypes to load the histograms.dll 
 lib = ctypes.cdll[plat_info['lib']]
 
 # OpenMP stuff
@@ -155,8 +158,6 @@ def hist2dNbits(x, y, n=8, force_n=False, option="", ihist=None, max=1):
         OPT = 4 ;
     elif (option == "par_rred"):
         OPT = 5 ;
-    elif (option == "serial_contiguous"):
-        OPT = 6;
     else :
         OPT = 0 ;
         
